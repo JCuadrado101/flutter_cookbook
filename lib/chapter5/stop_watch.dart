@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_cookbook/chapter5/platform_alert.dart';
 
 class StopWatch extends StatefulWidget {
+  static const route = '/stopwatch';
   const StopWatch({Key? key}) : super(key: key);
 
   @override
@@ -10,14 +12,16 @@ class StopWatch extends StatefulWidget {
 }
 
 class _StopWatchState extends State<StopWatch> {
+  final itemHeight = 60.0;
+  final scrollController = ScrollController();
   int milliseconds = 0;
   Timer? timer;
-  bool isTicking = true;
+  bool isTicking = false;
   final laps = <int>[];
 
   void _onTick(Timer timer) {
     setState(() {
-      ++milliseconds;
+      milliseconds += 100;
     });
   }
 
@@ -30,13 +34,43 @@ class _StopWatchState extends State<StopWatch> {
     });
   }
   
-  
 
-  void stopTimer() {
-    timer?.cancel();
+  void stopTimer(BuildContext context) {
     setState(() {
+      timer?.cancel();
       isTicking = false;
     });
+    final controller = showBottomSheet(
+        context: context,
+        builder: _buildRunCompleteSheet);
+
+    Future.delayed(Duration(seconds: 5)).then((_) {
+      controller.close();
+    });
+  }
+
+   Widget _buildRunCompleteSheet(BuildContext context) {
+    final totalRuntime = laps.fold(milliseconds, (int total, int lap) {
+      return total + lap;
+    });
+    final textTheme = Theme.of(context).textTheme;
+
+    return SafeArea(
+        child: Container(
+          color: Theme.of(context).cardColor,
+          width: double.infinity,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Run Finished', style: textTheme.headline6),
+                Text('Total Runtime: ${_secondsText(totalRuntime)}'),
+              ],
+            ),
+          )
+        )
+    );
   }
 
   String _secondsText(int milliseconds) {
@@ -47,8 +81,12 @@ class _StopWatchState extends State<StopWatch> {
   void _lap() {
     setState(() {
       laps.add(milliseconds);
-      milliseconds = 0;
     });
+    scrollController.animateTo(
+      scrollController.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeIn,
+    );
   }
 
   Widget _buildCounter(BuildContext context) {
@@ -69,10 +107,30 @@ class _StopWatchState extends State<StopWatch> {
                   .headline5
                   ?.copyWith(color: Colors.white)
           ),
+          _buildControls()
         ],
       ),
     );
   }
+
+  Widget _buildLapDisplay(){
+    return Scrollbar(
+      child: ListView.builder(
+        controller: scrollController,
+        itemExtent: itemHeight,
+        itemCount: laps.length,
+          itemBuilder: (context, index) {
+          final milliseconds = laps[index];
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 50.0),
+              title: Text('Lap ${index + 1}'),
+              trailing: Text(_secondsText(milliseconds)),
+            );
+          }
+      ),
+    );
+  }
+
 
   @override
   void dispose() {
@@ -83,63 +141,71 @@ class _StopWatchState extends State<StopWatch> {
 
   @override
   Widget build(BuildContext context) {
+    Object? name = ModalRoute.of(context)?.settings.arguments ?? '';
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Stop Watch'
+        title: Text(
+          name.toString(),
         ),
       ),
       body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            _secondsText(milliseconds),
-            style: Theme.of(context).textTheme.headline5,
+          Expanded(
+            child: _buildCounter(context),
           ),
-          const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ElevatedButton(
+          Expanded(
+            child: _buildLapDisplay(),
+          ),
+        ]
+      )
+    );
+  }
+
+  Row _buildControls() {
+    return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              style: ButtonStyle(
+                backgroundColor: MaterialStateProperty
+                    .all(Colors.green),
+                foregroundColor: MaterialStateProperty
+                  .all(Colors.white),
+              ),
+              child: const Text('Start'),
+              onPressed: () {
+                isTicking ? null : startTimer();
+              }
+            ),
+            const SizedBox(width: 20),
+            ElevatedButton(
                 style: ButtonStyle(
                   backgroundColor: MaterialStateProperty
-                      .all(Colors.green),
-                  foregroundColor: MaterialStateProperty
-                    .all(Colors.white),
+                      .all(Colors.yellow),
                 ),
-                child: const Text('Start'),
+                child: const Text('Lap'),
                 onPressed: () {
-                  startTimer();
+                  isTicking ? _lap() : null;
                 }
-              ),
-              const SizedBox(width: 20),
-              ElevatedButton(
-                  style: ButtonStyle(
-                    backgroundColor: MaterialStateProperty
-                        .all(Colors.yellow),
-                  ),
-                  child: const Text('Lap'),
+            ),
+            const SizedBox(width: 20),
+            Builder(
+              builder: (context) {
+                return TextButton(
+                    style: ButtonStyle(
+                      backgroundColor: MaterialStateProperty
+                          .all(Colors.red),
+                      foregroundColor: MaterialStateProperty
+                          .all(Colors.white),
+                    ),
                   onPressed: () {
-                    isTicking ? _lap : null;
-                  }
-              ),
-              const SizedBox(width: 20),
-              TextButton(
-                  style: ButtonStyle(
-                    backgroundColor: MaterialStateProperty
-                        .all(Colors.red),
-                    foregroundColor: MaterialStateProperty
-                        .all(Colors.white),
-                  ),
-                onPressed: () {
-                    stopTimer();
-                },
-                child: const Text('Stop')
-              )
-            ],
-          )
-        ],
-      ),
-    );
+                      isTicking ? stopTimer(context) : null;
+                  },
+                  child: const Text('Stop')
+                );
+              }
+            )
+          ],
+        );
   }
 }
